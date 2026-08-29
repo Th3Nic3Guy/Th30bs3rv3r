@@ -1,0 +1,12 @@
+# Copy to terraform.tfvars and fill in. See docs/adr/0001-gcp-tech-stack.md and
+# docs/FREE_WILL_PRD.md Section 6/9 for what each resource is for.
+
+project_id = "my-freewill-project"
+region     = "us-central1"
+zone       = "us-central1-a"
+environment = "dev"
+
+# Built from python/Dockerfile + go/Dockerfile.logshipper baked into a Compute Engine
+# image (or a Container-Optimized OS image running that container) — see
+# docs/FREE_WILL_PRD.md Section 6.0 step 1. No default: must be built before `apply`.
+run_instance_source_image = "projects/my-freewill-project/global/images/freewill-run-v1"
