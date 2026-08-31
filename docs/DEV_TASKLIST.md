@@ -36,6 +36,12 @@ as they land. Each item names the file(s) it touches.
       local_smoke_run.py` exercises all three round-trips end-to-end and is what the new
       `docker-compose` CI job runs — this sandbox has no Docker daemon, so, same as
       Terraform, CI is the only place this has actually been run against live containers.
+      **Confirmed green**: [run 33378857533](https://github.com/Th3Nic3Guy/Th30bs3rv3r/actions/runs/33378857533),
+      all 4 jobs passed; the `docker-compose` job's own log shows the smoke script's real
+      output — `Postgres OK: create/mark/get/summary/checkpoint round-tripped`,
+      `Redis OK: RunConfig round-tripped through put_config/get_config`,
+      `GCS emulator OK: wrote/read gs://freewill-checkpoints/smoke-test-run/tick_000000.npz`,
+      `ALL LOCAL STACK CHECKS PASSED` — not just a green checkmark taken on faith.
 - [ ] `go/cmd/orchestrator`: no local-dev path — its whole job is GCE-specific and has no
       local equivalent (there's nothing to "provision" on a laptop). Not a gap to close;
       just don't expect `docker-compose.yml` to exercise it.
