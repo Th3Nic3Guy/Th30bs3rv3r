@@ -9,9 +9,10 @@ developer's machine running the visualization UI (PRD Section 8.2).
 from __future__ import annotations
 
 import json
+from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import datetime
-from typing import Any, Iterator
+from typing import Any
 
 import psycopg
 from google.cloud.sql.connector import Connector

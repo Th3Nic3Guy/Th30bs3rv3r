@@ -69,7 +69,7 @@ class RunConfig(BaseModel):
     checkpoint_interval_ticks: int = Field(default=50, gt=0)
 
     @model_validator(mode="after")
-    def _validate_ranges(self) -> "RunConfig":
+    def _validate_ranges(self) -> RunConfig:
         for name in ("chi_range", "theta_range", "pi_range"):
             lo, hi = getattr(self, name)
             if lo > hi:
@@ -80,7 +80,7 @@ class RunConfig(BaseModel):
         return self.model_dump_json()
 
     @classmethod
-    def from_json(cls, raw: str | bytes) -> "RunConfig":
+    def from_json(cls, raw: str | bytes) -> RunConfig:
         return cls.model_validate(json.loads(raw))
 
     def to_dict(self) -> dict[str, Any]:

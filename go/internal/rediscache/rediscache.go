@@ -16,8 +16,8 @@ import (
 )
 
 const (
-	configTTL = 24 * time.Hour       // PRD 5: config is read-mostly; TTL just bounds staleness
-	dagTTL    = 7 * 24 * time.Hour   // PRD 6.3: static per-domain tensors change rarely
+	configTTL = 24 * time.Hour     // PRD 5: config is read-mostly; TTL just bounds staleness
+	dagTTL    = 7 * 24 * time.Hour // PRD 6.3: static per-domain tensors change rarely
 )
 
 func configKey(runID string) string { return fmt.Sprintf("run:%s:config", runID) }

@@ -31,20 +31,20 @@ import (
 )
 
 type config struct {
-	project           string
-	zone              string
-	cloudSQLInstance  string
-	cloudSQLDB        string
-	cloudSQLUser      string
-	redisAddr         string
-	sourceImage       string
-	network           string
-	subnetwork        string
-	serviceAccount    string
-	machineType       string
-	runID             string
-	domain            string
-	pollInterval      time.Duration
+	project          string
+	zone             string
+	cloudSQLInstance string
+	cloudSQLDB       string
+	cloudSQLUser     string
+	redisAddr        string
+	sourceImage      string
+	network          string
+	subnetwork       string
+	serviceAccount   string
+	machineType      string
+	runID            string
+	domain           string
+	pollInterval     time.Duration
 }
 
 func main() {
@@ -53,7 +53,7 @@ func main() {
 	flag.StringVar(&cfg.zone, "zone", "us-central1-a", "Compute Engine zone")
 	flag.StringVar(&cfg.cloudSQLInstance, "cloudsql-instance", "", "Cloud SQL instance connection name (PROJECT:REGION:INSTANCE)")
 	flag.StringVar(&cfg.cloudSQLDB, "cloudsql-db", "freewill", "Cloud SQL database name")
-	flag.StringVar(&cfg.cloudSQLUser, "cloudsql-user", "freewill-orchestrator", "Cloud SQL IAM user")
+	flag.StringVar(&cfg.cloudSQLUser, "cloudsql-user", "freewill-orchestrator@PROJECT.iam", "Cloud SQL IAM database user — the orchestrator service account's email with the .gserviceaccount.com suffix trimmed (matches infra/terraform/cloudsql.tf's google_sql_user.orchestrator); must be overridden with the real project ID")
 	flag.StringVar(&cfg.redisAddr, "redis-addr", "", "Memorystore Redis address (host:port)")
 	flag.StringVar(&cfg.sourceImage, "source-image", "", "Compute Engine source image for the run instance")
 	flag.StringVar(&cfg.network, "network", "default", "VPC network")

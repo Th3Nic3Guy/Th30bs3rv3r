@@ -24,10 +24,10 @@ type InstanceSpec struct {
 	// SourceImage is the prebuilt image carrying the Python simulation engine
 	// (python/Dockerfile baked into a Compute Engine image, or a container-optimized-OS
 	// image running that container) — PRD Section 6.0 step 1.
-	SourceImage      string
-	Network          string
-	Subnetwork       string
-	ServiceAccount   string
+	SourceImage          string
+	Network              string
+	Subnetwork           string
+	ServiceAccount       string
 	ServiceAccountScopes []string
 	// Metadata is passed to the instance as key/value pairs; must include at least
 	// "run-id" so the instance's startup script (or container entrypoint) knows which

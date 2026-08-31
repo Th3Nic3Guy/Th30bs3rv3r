@@ -8,19 +8,19 @@ from freewill.config.params import BetaShapeConfig, RunConfig, load_run_config
 
 
 def _base_kwargs(**overrides):
-    kwargs = dict(
-        run_id="run-0001",
-        domain="climate",
-        seed=42,
-        chi_range=(0.1, 0.9),
-        theta_range=(0.0, 1.0),
-        pi_range=(0.2, 0.8),
-        epsilon_explore=0.1,
-        tau_still=0.5,
-        influencer_reach=30,
-        num_agents=500,
-        num_ticks=1000,
-    )
+    kwargs = {
+        "run_id": "run-0001",
+        "domain": "climate",
+        "seed": 42,
+        "chi_range": (0.1, 0.9),
+        "theta_range": (0.0, 1.0),
+        "pi_range": (0.2, 0.8),
+        "epsilon_explore": 0.1,
+        "tau_still": 0.5,
+        "influencer_reach": 30,
+        "num_agents": 500,
+        "num_ticks": 1000,
+    }
     kwargs.update(overrides)
     return kwargs
 
