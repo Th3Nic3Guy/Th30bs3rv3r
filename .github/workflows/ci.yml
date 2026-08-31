@@ -18,6 +18,12 @@ jobs:
           python-version: "3.11"
       - run: pip install -e ".[dev,ui]"
       - run: ruff check .
+      # Split out as its own step (PRD Section 4.4: cross-validate the vectorized
+      # mechanism functions against the iterative reference oracle "on every change" to
+      # a mechanism module) so a regression here is visible as its own failing step in
+      # the Actions UI, not buried inside the general test run below.
+      - name: Cross-validate mechanism modules against the iterative reference (PRD 4.4)
+        run: pytest -q tests/test_cross_validation.py
       - run: pytest -q
 
   go:

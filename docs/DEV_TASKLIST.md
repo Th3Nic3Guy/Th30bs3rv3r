@@ -149,11 +149,13 @@ Validation harness (PRD Section 4.4):
       each — `np.testing.assert_allclose` for the numeric ones, exact set-equality plus
       independently-recomputed expected values for the two trigger-scan functions. 37
       tests pass total (32 unit + 5 cross-validation classes), `ruff check .` clean.
-- [ ] Add this cross-validation run to CI as its own explicit step/job, gated on any
-      change under `python/freewill/mechanisms/` specifically, per PRD Section 4.4's "on
-      every change" mandate — right now it's just part of the regular `pytest -q` run in
-      the `python` CI job, which does run it on every push but doesn't call it out as the
-      cross-validation gate PRD 4.4 asks for.
+- [x] Given its own explicit, separately-named step in the `python` CI job
+      (`.github/workflows/ci.yml`) so a regression shows as its own failing step in the
+      Actions UI, not buried inside the general `pytest -q` run. Runs on every push (not
+      path-filtered to `mechanisms/` specifically — GitHub Actions doesn't support
+      per-step path filters, only per-workflow, and this workflow already covers Python/
+      Go/Terraform/compose together) — broader than PRD 4.4's literal "on every change to
+      a mechanism module" but strictly a superset of it.
 
 ## M2 — Storage
 
