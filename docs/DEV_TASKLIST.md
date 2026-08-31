@@ -205,6 +205,8 @@ Validation harness (PRD Section 4.4):
   - 15 new tests (`tests/test_memory_chain.py`, including one that round-trips through
       the real `Event`/`EventLogBuffer` writer rather than only hand-rolled dicts). 51
       tests pass total, `ruff check .` clean.
+      **Confirmed green**: [run 33421489942](https://github.com/Th3Nic3Guy/Th30bs3rv3r/actions/runs/33421489942),
+      all 4 jobs passed on GitHub's runners.
   - Not yet exercised against a real (or emulated) GCS bucket — `read_memory_chain_from_gcs`
       is untested beyond import; a natural next step is adding it to the docker-compose
       smoke script (`python/scripts/local_smoke_run.py`) once an event-log archive
