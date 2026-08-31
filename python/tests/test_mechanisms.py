@@ -7,6 +7,7 @@ import pytest
 from freewill.engine.state import NO_OPERAND, DagAdjacency, PropositionSchema, TrustStore
 from freewill.mechanisms import composite_trust, fallacy_extensions, reluctance
 from freewill.mechanisms.fuzzy_resolution import ExprType, resolve
+from freewill.mechanisms.orphan_revelation import find_revelation_candidates
 from freewill.mechanisms.smoothstep import degree_from_sigma, smoothstep
 
 
@@ -194,3 +195,62 @@ class TestCompositeTrust:
         # prop 0 is itself an axiom -- calling on it must not raise or do anything.
         composite_trust.derive_missing_for_proposition(trust, schema, 0)
         assert trust.get_matrix(0) is not None  # unchanged, still just the one entry set above
+
+    def test_derives_for_not_composite_from_left_operand_only(self):
+        # NOT is unary (draft Table 1): operand_right is NO_OPERAND by construction.
+        # Regression test for a bug where requiring "both operands known" (the AND/OR/
+        # IMPLIES reading) meant a NOT composite could never derive trust at all.
+        schema = PropositionSchema(
+            expr_type=np.array([ExprType.AXIOM, ExprType.NOT]),
+            operand_left=np.array([NO_OPERAND, 0]),
+            operand_right=np.array([NO_OPERAND, NO_OPERAND]),
+        )
+        trust = TrustStore(num_agents=3)
+        trust.set(0, np.array([0]), np.array([1]), np.array([0.3]))
+
+        composite_trust.derive_missing_for_proposition(trust, schema, 1)
+
+        assert trust.has_entry(1, np.array([0]), np.array([1]))[0]
+        assert trust.get(1, np.array([0]), np.array([1]))[0] == pytest.approx(-0.3)
+
+
+class TestOrphanRevelationCandidates:
+    def test_and_composite_needs_both_operands_known(self):
+        schema = PropositionSchema(
+            expr_type=np.array([ExprType.AXIOM, ExprType.AXIOM, ExprType.AND]),
+            operand_left=np.array([NO_OPERAND, NO_OPERAND, 0]),
+            operand_right=np.array([NO_OPERAND, NO_OPERAND, 1]),
+        )
+        known = np.array([[True, False, False]])  # only operand 0 known
+        orphan = np.array([[False, False, True]])
+        agents, props = find_revelation_candidates(schema, known, orphan)
+        assert len(agents) == 0
+
+        known = np.array([[True, True, False]])  # both operands now known
+        agents, props = find_revelation_candidates(schema, known, orphan)
+        assert list(zip(agents, props)) == [(0, 2)]
+
+    def test_not_composite_triggers_off_left_operand_alone(self):
+        # Regression test: requiring right != NO_OPERAND too (the AND/OR reading) meant a
+        # NOT composite could never be revealed, since its operand_right is always
+        # NO_OPERAND.
+        schema = PropositionSchema(
+            expr_type=np.array([ExprType.AXIOM, ExprType.NOT]),
+            operand_left=np.array([NO_OPERAND, 0]),
+            operand_right=np.array([NO_OPERAND, NO_OPERAND]),
+        )
+        known = np.array([[True, False]])
+        orphan = np.array([[False, True]])
+        agents, props = find_revelation_candidates(schema, known, orphan)
+        assert list(zip(agents, props)) == [(0, 1)]
+
+    def test_axiom_never_triggers(self):
+        schema = PropositionSchema(
+            expr_type=np.array([ExprType.AXIOM]),
+            operand_left=np.array([NO_OPERAND]),
+            operand_right=np.array([NO_OPERAND]),
+        )
+        known = np.array([[True]])
+        orphan = np.array([[False]])  # axioms are never orphaned in the first place
+        agents, _props = find_revelation_candidates(schema, known, orphan)
+        assert len(agents) == 0

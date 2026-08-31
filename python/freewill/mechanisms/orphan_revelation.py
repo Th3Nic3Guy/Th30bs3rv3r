@@ -13,7 +13,7 @@ from __future__ import annotations
 import numpy as np
 
 from freewill.engine.state import NO_OPERAND, PropositionSchema
-from freewill.mechanisms.fuzzy_resolution import resolve
+from freewill.mechanisms.fuzzy_resolution import ExprType, resolve
 from freewill.mechanisms.reluctance import decay
 
 
@@ -25,15 +25,26 @@ def arrival_belief(nu: np.ndarray, tau_p_given_i: np.ndarray) -> np.ndarray:
 def find_revelation_candidates(
     schema: PropositionSchema, known: np.ndarray, orphan: np.ndarray
 ) -> tuple[np.ndarray, np.ndarray]:
-    """Every (agent, proposition) pair currently orphaned whose *both* operands are now
-    known to that agent — the single elementwise boolean AND across sparse-ish arrays PRD
-    4.9 describes. Returns (agent_idx, prop_idx) arrays for the triggered batch."""
+    """Every (agent, proposition) pair currently orphaned whose operand(s) are now known
+    to that agent — the single elementwise boolean AND across sparse-ish arrays PRD 4.9
+    describes. Returns (agent_idx, prop_idx) arrays for the triggered batch.
+
+    NOT is unary (draft Table 1): its `operand_right` is `NO_OPERAND` by construction
+    (`PropositionSchema`'s own docstring), so revelation for a NOT node must trigger off
+    `operand_left` alone — requiring `right != NO_OPERAND` too, as a naive "both operands
+    known" check would, means a NOT composite could never be revealed at all.
+    """
     left = schema.operand_left
     right = schema.operand_right
-    has_operands = (left != NO_OPERAND) & (right != NO_OPERAND)
+    is_not = schema.expr_type == ExprType.NOT
+
+    has_operands = (left != NO_OPERAND) & (is_not | (right != NO_OPERAND))
     # known[:, left] / known[:, right] gather each proposition's operand-known status per
-    # agent in one indexed read — shape (agents, propositions).
-    operands_known = known[:, left] & known[:, right]
+    # agent in one indexed read — shape (agents, propositions). For NOT columns, right is
+    # NO_OPERAND (an out-of-range index that numpy silently wraps to the last column), so
+    # known[:, right] there is meaningless -- ORing with is_not discards it rather than
+    # letting it accidentally gate revelation on an unrelated proposition's known status.
+    operands_known = known[:, left] & (is_not[None, :] | known[:, right])
     triggered = orphan & operands_known & has_operands[None, :]
     return np.nonzero(triggered)
 
@@ -46,6 +57,9 @@ def compute_omega_struct(
     left = schema.operand_left[prop_idx]
     right = schema.operand_right[prop_idx]
     beta_left = belief[agent_idx, left]
+    # For NOT rows, `right` is NO_OPERAND (-1); numpy silently reads the last column
+    # rather than raising, but `resolve` ignores beta_right wherever expr_type is NOT
+    # (fuzzy_resolution.py), so that harmlessly-wrong read never reaches the result.
     beta_right = belief[agent_idx, right]
     return resolve(schema.expr_type[prop_idx], beta_left, beta_right)
 
