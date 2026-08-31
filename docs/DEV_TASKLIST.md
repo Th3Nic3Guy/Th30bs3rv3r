@@ -79,7 +79,8 @@ smoke run — belief converges plausibly toward an influencer's agenda, discover
 tracking behaves correctly, no crashes over 20 ticks). Unit tests
 (`tests/test_mechanisms.py`, `tests/test_config_params.py`) cover the pure-math pieces
 (fuzzy resolution, SmoothStep, reluctance, fallacy extensions) against hand-worked values
-from the draft's own formulas. 32 tests pass; `ruff check .` is clean.
+from the draft's own formulas. 37 tests pass (including the cross-validation harness
+below); `ruff check .` is clean.
 
 - [x] `fuzzy_resolution.py` (3.1), `trust_belief_update.py` (3.2), `reluctance.py` (3.3),
       `smoothstep.py` (3.5), `fallacy_extensions.py` (3.7), `orphan_revelation.py` (3.8),
@@ -131,16 +132,28 @@ correctness bug found and left unfixed):
       (`np.savez_compressed` handles dense arrays natively) but hasn't been exercised
       against a real GCS bucket.
 
-Validation harness (PRD Section 4.4) — **not started this pass**, tracked separately from
-the mechanism implementation above since it's substantial work in its own right:
+Validation harness (PRD Section 4.4):
 
-- [ ] `python/freewill/validation/iterative_reference.py`: implement the per-agent-loop
-      reference for each mechanism, mirroring the vectorized modules above.
-- [ ] `python/tests/test_cross_validation.py`: un-skip and assert exact numerical
-      agreement between `freewill.engine.run_tick` and
-      `freewill.validation.run_iterative_reference` on identical seeds, 10–20 agents.
-- [ ] Add this cross-validation run to CI, gated on any change under
-      `python/freewill/mechanisms/`, per PRD Section 4.4's "on every change" mandate.
+- [x] `python/freewill/validation/iterative_reference.py`: naive per-agent-loop
+      references for the five functions where a real vectorized-vs-naive contrast exists
+      today — `reluctance.compute_rho`, `trust_belief_update.compute_alpha`,
+      `flowback.omega_flux`, `orphan_revelation.find_revelation_candidates`,
+      `composite_trust.derive_missing_for_proposition` — with a scope note in the
+      module's own docstring on why this isn't a from-scratch reference of the whole tick
+      cycle (the vectorized engine already processes most of a tick per-message, not in
+      population-wide batches, so a full re-implementation would mostly duplicate that
+      same per-message code rather than exercise a different path). Revisit the scope if
+      `tick_loop.py`'s per-agent scheduling loop is later vectorized further.
+- [x] `python/tests/test_cross_validation.py`: real tests now (the un-skip), cross-
+      checking all five functions above against 20 random seeds and 10-agent populations
+      each — `np.testing.assert_allclose` for the numeric ones, exact set-equality plus
+      independently-recomputed expected values for the two trigger-scan functions. 37
+      tests pass total (32 unit + 5 cross-validation classes), `ruff check .` clean.
+- [ ] Add this cross-validation run to CI as its own explicit step/job, gated on any
+      change under `python/freewill/mechanisms/` specifically, per PRD Section 4.4's "on
+      every change" mandate — right now it's just part of the regular `pytest -q` run in
+      the `python` CI job, which does run it on every push but doesn't call it out as the
+      cross-validation gate PRD 4.4 asks for.
 
 ## M2 — Storage
 
