@@ -26,18 +26,28 @@ as they land. Each item names the file(s) it touches.
 
 ## M0.5 — Infra live
 
+- [x] **CI wired and confirmed actually running** (`.github/workflows/ci.yml`) — a first
+      attempt used `on: push: branches: [main]` and silently never ran on this
+      feature-branch-only workflow (zero recorded runs); fixed to trigger on every push.
+      Run [33376607581](https://github.com/Th3Nic3Guy/Th30bs3rv3r/actions/runs/33376607581)
+      confirms all three jobs green on GitHub's runners: `terraform fmt/init/validate`
+      against the real `hashicorp/google` provider (this sandbox's network policy blocks
+      `registry.terraform.io`, so this is the first time the Terraform was actually
+      schema-validated, not just formatted), `go build/vet/test/gofmt` on a clean
+      checkout, and `pip install -e ".[dev,ui]"` + `ruff` + `pytest` with every dependency
+      resolved for real (including the `cloud-sql-python-connector[psycopg]` fix and the
+      `dash`/`plotly` UI extras).
 - [ ] Build the run-instance image from `python/Dockerfile` + `go/Dockerfile.logshipper`
       (PRD Section 6.0 step 1) and publish it; fill in
-      `infra/terraform/terraform.tfvars.example`'s `run_instance_source_image`.
+      `infra/terraform/terraform.tfvars.example`'s `run_instance_source_image`. Needs a
+      real GCP project/registry — no credentials available in this session's sandbox.
 - [ ] `terraform init && terraform plan && terraform apply` in `infra/terraform/` against
-      a real GCP project.
+      a real GCP project. `validate` is now confirmed clean (above); `plan`/`apply` need
+      real project credentials this sandbox doesn't have.
 - [ ] Apply `infra/sql/schema.sql` to the provisioned Cloud SQL instance.
 - [ ] Validate `go/cmd/orchestrator` can provision and tear down a single real Compute
       Engine instance end-to-end (`-project`, `-cloudsql-instance`, `-redis-addr`,
       `-source-image`, `-service-account` flags all point at the real resources).
-- [ ] Wire CI (or a local script) to run `go build ./... && go vet ./...` in `go/` and
-      `pytest` in `python/` on every push — nothing currently automates the checks this
-      session ran by hand.
 
 ## M1 — Core engine
 
