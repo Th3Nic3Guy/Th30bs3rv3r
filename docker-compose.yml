@@ -1,0 +1,95 @@
+# Local development stack for the FREE WILL platform — a GCP-free stand-in for
+# infra/terraform's real Cloud SQL / Memorystore / Cloud Storage, per PRD Section 6, so
+# the engine and Go services can be developed and smoke-tested without a GCP project.
+#
+# What's emulated and how (docs/adr/0002-engine-state-representation.md's scope note
+# extends to infra too — see docs/LOCAL_DEV.md for the fuller writeup):
+#   - Cloud SQL (PostgreSQL)  -> plain `postgres` image. No Cloud SQL connector involved:
+#     python/freewill/storage/run_registry.py's RunRegistry.for_local_postgres and
+#     go/internal/cloudsql.OpenLocal both bypass it and connect with a normal DSN.
+#   - Memorystore (Redis)     -> plain `redis` image. No code change needed — both the
+#     Python and Go Redis clients already just take a host:port.
+#   - Cloud Storage           -> fsouza/fake-gcs-server. No code change needed either:
+#     both google-cloud-storage (Python) and cloud.google.com/go/storage (Go) auto-detect
+#     the STORAGE_EMULATOR_HOST env var and switch to anonymous, unauthenticated requests
+#     against it. Buckets are pre-seeded from infra/docker/gcs-data/'s subdirectories.
+#   - Cloud Logging           -> no emulator exists; go/cmd/logshipper's `-local` flag
+#     skips it and logs to stdout instead. The Python engine has no Cloud Logging
+#     integration of its own yet (docs/DEV_TASKLIST.md's cross-cutting section).
+#
+# Usage:
+#   docker compose up -d postgres redis gcs-emulator
+#   cd python && PYTHONPATH=. python scripts/local_smoke_run.py   # exercises all three
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: freewill
+      POSTGRES_PASSWORD: freewill
+      POSTGRES_DB: freewill
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./infra/sql/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U freewill -d freewill"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  gcs-emulator:
+    image: fsouza/fake-gcs-server:1.52.2
+    command: ["-scheme", "http", "-public-host", "gcs-emulator:4443", "-external-url", "http://gcs-emulator:4443"]
+    ports:
+      - "4443:4443"
+    volumes:
+      # fake-gcs-server auto-creates one bucket per top-level subdirectory under /data —
+      # freewill-checkpoints (PRD 6.2) and freewill-event-logs (PRD 6.5).
+      - ./infra/docker/gcs-data:/data
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://localhost:4443/storage/v1/b"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # Runs one local simulation-engine smoke check against the three services above, then
+  # exits. Not meant to stay running — `docker compose run --rm simulation-smoke-test`
+  # (or CI's docker-compose job) is the intended invocation, not `up`.
+  simulation-smoke-test:
+    build:
+      context: ./python
+    working_dir: /app
+    environment:
+      POSTGRES_DSN: "host=postgres user=freewill password=freewill dbname=freewill sslmode=disable"
+      REDIS_ADDR: "redis:6379"
+      STORAGE_EMULATOR_HOST: "http://gcs-emulator:4443"
+      CHECKPOINTS_BUCKET: "freewill-checkpoints"
+      PYTHONPATH: "/app"
+    # scripts/ is dev-only tooling, deliberately not baked into python/Dockerfile's
+    # production image — mounted in just for this smoke-test service instead.
+    volumes:
+      - ./python/scripts:/app/scripts:ro
+    entrypoint: ["python", "scripts/local_smoke_run.py"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      gcs-emulator:
+        condition: service_healthy
+    profiles: ["smoke-test"]
+
+volumes:
+  postgres-data:

@@ -26,6 +26,19 @@ as they land. Each item names the file(s) it touches.
 
 ## M0.5 — Infra live
 
+- [x] **Local dev stack** (`docker-compose.yml`, `docs/LOCAL_DEV.md`): Postgres + Redis +
+      `fake-gcs-server` stand in for Cloud SQL/Memorystore/Cloud Storage with no GCP
+      project needed. Cloud Storage needed zero code changes (both storage client
+      libraries auto-detect `STORAGE_EMULATOR_HOST`); Cloud SQL needed a real bypass path
+      since it has no official emulator (`RunRegistry.for_local_postgres`,
+      `cloudsql.OpenLocal`); Cloud Logging has no local stand-in at all
+      (`go/cmd/logshipper -local` just logs to stdout instead). `python/scripts/
+      local_smoke_run.py` exercises all three round-trips end-to-end and is what the new
+      `docker-compose` CI job runs — this sandbox has no Docker daemon, so, same as
+      Terraform, CI is the only place this has actually been run against live containers.
+- [ ] `go/cmd/orchestrator`: no local-dev path — its whole job is GCE-specific and has no
+      local equivalent (there's nothing to "provision" on a laptop). Not a gap to close;
+      just don't expect `docker-compose.yml` to exercise it.
 - [x] **CI wired and confirmed actually running** (`.github/workflows/ci.yml`) — a first
       attempt used `on: push: branches: [main]` and silently never ran on this
       feature-branch-only workflow (zero recorded runs); fixed to trigger on every push.

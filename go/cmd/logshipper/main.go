@@ -7,6 +7,12 @@
 //     run_id/tick/event_type/mechanism for Log Explorer queries (PRD Section 7).
 //   - Cloud Storage, as the durable, full-fidelity archive (PRD Section 6.5) — Cloud
 //     Logging's own retention is not meant to be the only copy of the event history.
+//
+// Local development (docker-compose.yml): Cloud Logging has no official local emulator
+// (unlike Cloud Storage, which internal/gcs just points at fake-gcs-server via
+// STORAGE_EMULATOR_HOST with no code changes needed). The -local flag skips Cloud
+// Logging entirely and logs each shipped event to stdout instead; the Cloud Storage
+// side is unaffected and ships to the emulator exactly as it would to the real thing.
 package main
 
 import (
@@ -45,16 +51,19 @@ type config struct {
 	runID        string
 	batchSize    int
 	pollInterval time.Duration
+	local        bool
 }
 
 func main() {
 	var cfg config
-	flag.StringVar(&cfg.project, "project", "", "GCP project ID")
+	flag.StringVar(&cfg.project, "project", "", "GCP project ID (ignored with -local)")
 	flag.StringVar(&cfg.stagingPath, "staging-path", "", "path to the engine's local JSON-lines event-log staging file")
 	flag.StringVar(&cfg.bucket, "bucket", "", "Cloud Storage bucket for the event-log archive (PRD 6.5: freewill-event-logs)")
 	flag.StringVar(&cfg.runID, "run-id", "", "run_id being shipped")
 	flag.IntVar(&cfg.batchSize, "batch-size", 500, "lines per shipped batch (matches the engine's EventLogBuffer flush_every)")
 	flag.DurationVar(&cfg.pollInterval, "poll-interval", 5*time.Second, "how often to check the staging file for new lines")
+	flag.BoolVar(&cfg.local, "local", false, "skip Cloud Logging (no local emulator exists) and log events to stdout instead; "+
+		"set STORAGE_EMULATOR_HOST to point the Cloud Storage side at docker-compose's gcs-emulator service")
 	flag.Parse()
 
 	if cfg.stagingPath == "" || cfg.bucket == "" || cfg.runID == "" {
@@ -68,12 +77,15 @@ func main() {
 }
 
 func run(ctx context.Context, cfg config) error {
-	logClient, err := logging.NewClient(ctx, cfg.project)
-	if err != nil {
-		return fmt.Errorf("logshipper: creating logging client: %w", err)
+	var logger *logging.Logger
+	if !cfg.local {
+		logClient, err := logging.NewClient(ctx, cfg.project)
+		if err != nil {
+			return fmt.Errorf("logshipper: creating logging client: %w", err)
+		}
+		defer logClient.Close()
+		logger = logClient.Logger(eventsLogID)
 	}
-	defer logClient.Close()
-	logger := logClient.Logger(eventsLogID)
 
 	gcsClient, err := gcs.New(ctx, cfg.bucket)
 	if err != nil {
@@ -145,14 +157,18 @@ func shipNewLines(
 			continue
 		}
 
-		logger.Log(logging.Entry{
-			Payload: json.RawMessage(line),
-			Labels: map[string]string{
-				"run_id":     rec.RunID,
-				"event_type": rec.EventType,
-				"mechanism":  rec.Mechanism,
-			},
-		})
+		if logger != nil {
+			logger.Log(logging.Entry{
+				Payload: json.RawMessage(line),
+				Labels: map[string]string{
+					"run_id":     rec.RunID,
+					"event_type": rec.EventType,
+					"mechanism":  rec.Mechanism,
+				},
+			})
+		} else {
+			log.Printf("[event] run=%s type=%s mechanism=%s", rec.RunID, rec.EventType, rec.Mechanism)
+		}
 
 		batch.WriteString(line)
 		batch.WriteByte('\n')
@@ -166,8 +182,10 @@ func shipNewLines(
 		return offset, false, nil
 	}
 
-	if err := logger.Flush(); err != nil {
-		return offset, false, fmt.Errorf("flushing cloud logging batch: %w", err)
+	if logger != nil {
+		if err := logger.Flush(); err != nil {
+			return offset, false, fmt.Errorf("flushing cloud logging batch: %w", err)
+		}
 	}
 
 	// TODO: a periodic compaction job should merge these per-batch objects into the

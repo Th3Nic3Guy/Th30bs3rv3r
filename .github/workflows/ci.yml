@@ -50,3 +50,23 @@ jobs:
       - run: terraform fmt -check -diff
       - run: terraform init -backend=false
       - run: terraform validate
+
+  docker-compose:
+    name: Docker Compose (local dev stack)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker compose up -d postgres redis gcs-emulator
+      - name: Wait for services to be healthy
+        run: |
+          for svc in postgres redis gcs-emulator; do
+            for i in $(seq 1 30); do
+              status=$(docker inspect --format='{{.State.Health.Status}}' "$(docker compose ps -q $svc)")
+              [ "$status" = "healthy" ] && break
+              sleep 2
+            done
+            [ "$status" = "healthy" ] || { echo "$svc never became healthy"; docker compose logs "$svc"; exit 1; }
+          done
+      - run: docker compose --profile smoke-test run --rm simulation-smoke-test
+      - if: always()
+        run: docker compose down -v

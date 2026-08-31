@@ -6,6 +6,12 @@
 //
 // See infra/sql/schema.sql for the `runs` / `run_summaries` / `checkpoints` DDL this
 // package reads and writes.
+//
+// Local development (docker-compose.yml): Cloud SQL has no official local emulator
+// (unlike Cloud Storage, which internal/gcs just points at fake-gcs-server via
+// STORAGE_EMULATOR_HOST with no code changes). OpenLocal bypasses cloudsqlconn entirely
+// and talks to a plain Postgres instance over a standard DSN; every method on
+// *RunRegistry works identically either way since they only ever touch r.db.
 package cloudsql
 
 import (
@@ -16,6 +22,7 @@ import (
 
 	"cloud.google.com/go/cloudsqlconn"
 	"cloud.google.com/go/cloudsqlconn/postgres/pgxv5"
+	_ "github.com/jackc/pgx/v5/stdlib" // registers the "pgx" database/sql driver, used by OpenLocal
 )
 
 const driverName = "cloudsql-postgres"
@@ -67,6 +74,22 @@ func Open(ctx context.Context, cfg Config) (*RunRegistry, error) {
 	}
 
 	return &RunRegistry{db: db, cleanup: cleanup}, nil
+}
+
+// OpenLocal connects straight to a plain Postgres instance (docker-compose's `postgres`
+// service) instead of dialing Cloud SQL. `dsn` is a standard libpq keyword/value or URI
+// connection string, e.g. "host=postgres user=freewill password=freewill dbname=freewill
+// sslmode=disable".
+func OpenLocal(ctx context.Context, dsn string) (*RunRegistry, error) {
+	db, err := sql.Open("pgx", dsn)
+	if err != nil {
+		return nil, fmt.Errorf("cloudsql: opening local db: %w", err)
+	}
+	if err := db.PingContext(ctx); err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("cloudsql: ping local db: %w", err)
+	}
+	return &RunRegistry{db: db, cleanup: func() error { return nil }}, nil
 }
 
 // CreateRun inserts a new `runs` row in "pending" status.

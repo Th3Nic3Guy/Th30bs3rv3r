@@ -24,3 +24,8 @@ go/bin/
 *.tfstate.*
 .terraform.lock.hcl
 terraform.tfvars
+
+# Local dev stack (docker-compose.yml / docs/LOCAL_DEV.md) -- fake-gcs-server persists
+# objects into these mounted directories, and .gitkeep is all that should be tracked.
+infra/docker/gcs-data/*/*
+!infra/docker/gcs-data/*/.gitkeep

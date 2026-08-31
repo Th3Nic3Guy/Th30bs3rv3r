@@ -17,6 +17,14 @@ is used.
   ```sh
   psql "host=<cloudsql_connection_name via Cloud SQL Auth Proxy> dbname=freewill" -f sql/schema.sql
   ```
+- `docker/gcs-data/` — bucket-seed directories for the local dev stack's GCS emulator
+  (`fsouza/fake-gcs-server`, see `../docker-compose.yml` and `../docs/LOCAL_DEV.md`); not
+  used by the real Terraform-provisioned infra at all.
+
+**Don't have a GCP project yet?** `../docs/LOCAL_DEV.md` runs the same three storage
+backends (Postgres, Redis, a GCS emulator) locally via `docker compose up`, no
+credentials needed — useful for developing the engine/mechanism code without waiting on
+this section.
 
 ## Bringing the stack up
 
