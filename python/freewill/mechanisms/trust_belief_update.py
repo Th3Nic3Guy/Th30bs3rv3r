@@ -13,7 +13,8 @@ from __future__ import annotations
 
 import numpy as np
 
-from freewill.engine.state import SimulationState, TrustStore
+from freewill.engine.state import PropositionSchema, SimulationState, TrustStore
+from freewill.mechanisms.composite_trust import derive_missing_for_proposition
 
 
 def update_phi(
@@ -26,17 +27,25 @@ def update_phi(
     phi_message_count[publisher, prop] = counts
 
 
-def compute_alpha(trust: TrustStore, phi: np.ndarray, prop_ids: np.ndarray) -> dict[int, np.ndarray]:
+def compute_alpha(
+    trust: TrustStore, schema: PropositionSchema, phi: np.ndarray, prop_ids: np.ndarray
+) -> dict[int, np.ndarray]:
     """alpha(I)|t = (2/|P|) * sum_P phi(I|P)*tau(P|I), for every proposition in
     `prop_ids`, over the whole population at once: `T[I] @ phi[:,I]` is exactly this sum
     (row = receiver, column = publisher), divided by each receiver's known-publisher
     count. Returns {prop_id: alpha_vector (agents,)}; a receiver with no known publishers
     on I (known_count=0) reads alpha=0 (an empty consensus contributes nothing, rather
-    than being undefined)."""
+    than being undefined).
+
+    For each composite proposition, composite trust derivation (draft 3.9) runs first so
+    a publisher with no *direct* trust entry on I, but trust on both of I's operands,
+    still contributes to alpha(I) — matching the draft's fallback-derivation semantics
+    rather than silently treating that publisher as unknown."""
     num_agents = trust.num_agents
     all_receivers = np.arange(num_agents)
     out: dict[int, np.ndarray] = {}
     for prop_id in prop_ids:
+        derive_missing_for_proposition(trust, schema, int(prop_id))
         weighted_sum = trust.matvec(int(prop_id), phi[:, prop_id])
         known = trust.known_count(int(prop_id), all_receivers)
         known_safe = np.where(known == 0, 1, known)
@@ -76,7 +85,7 @@ def apply_dirty_set_update(state: SimulationState, agent_idx: np.ndarray, prop_i
     extensions and Section 3.3's reluctance damping before committing it to `belief`.
     """
     unique_props = np.unique(prop_idx)
-    alpha_by_prop = compute_alpha(state.trust, state.phi, unique_props)
+    alpha_by_prop = compute_alpha(state.trust, state.schema, state.phi, unique_props)
     alpha = np.array([alpha_by_prop[int(p)][a] for a, p in zip(agent_idx, prop_idx)])
     omega = state.get_omega(agent_idx, prop_idx)
     lam = state.coefficients["lambda"].to_numpy()[agent_idx]

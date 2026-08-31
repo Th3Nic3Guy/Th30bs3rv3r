@@ -142,6 +142,13 @@ class TrustStore:
         """Read-only access to a proposition's full matrix, or None if never touched."""
         return self._store.get(prop_id)
 
+    def known_matrix(self, prop_id: int) -> lil_matrix | None:
+        """Read-only access to a proposition's "has an entry" boolean mask, or None if
+        never touched. `composite_trust.py`'s batched derivation (draft 3.9) uses this to
+        find every (receiver, publisher) pair with trust on *both* of a composite's
+        operands via one elementwise AND, rather than a per-pair scan."""
+        return self._known.get(prop_id)
+
     def get(self, prop_id: int, receiver: np.ndarray, publisher: np.ndarray) -> np.ndarray:
         """Batched read of tau(publisher|prop_id) for a receiver, indexed by parallel
         arrays. Missing entries (never initialized) read as 0.0 — callers needing to

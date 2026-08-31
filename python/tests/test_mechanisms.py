@@ -1,11 +1,11 @@
 """Unit tests for the mechanism modules' pure-math functions, checked against hand-worked
-values from FREE_WILL_draft.md's own formulas (Sections 3.1, 3.3, 3.5, 3.7)."""
+values from FREE_WILL_draft.md's own formulas (Sections 3.1, 3.3, 3.5, 3.7, 3.9)."""
 
 import numpy as np
 import pytest
 
-from freewill.engine.state import DagAdjacency
-from freewill.mechanisms import fallacy_extensions, reluctance
+from freewill.engine.state import NO_OPERAND, DagAdjacency, PropositionSchema, TrustStore
+from freewill.mechanisms import composite_trust, fallacy_extensions, reluctance
 from freewill.mechanisms.fuzzy_resolution import ExprType, resolve
 from freewill.mechanisms.smoothstep import degree_from_sigma, smoothstep
 
@@ -141,3 +141,56 @@ class TestFallacyExtensions:
     def test_is_disagreement_compares_signs(self):
         out = fallacy_extensions.is_disagreement(np.array([0.2, -0.2]), np.array([-0.1, -0.1]))
         assert list(out) == [True, False]
+
+
+class TestCompositeTrust:
+    def _schema(self, expr_type: ExprType) -> PropositionSchema:
+        # prop 0, 1 are axioms (operands); prop 2 is the composite under test.
+        return PropositionSchema(
+            expr_type=np.array([ExprType.AXIOM, ExprType.AXIOM, expr_type]),
+            operand_left=np.array([NO_OPERAND, NO_OPERAND, 0]),
+            operand_right=np.array([NO_OPERAND, NO_OPERAND, 1]),
+        )
+
+    def test_derives_for_pair_known_on_both_operands(self):
+        schema = self._schema(ExprType.AND)
+        trust = TrustStore(num_agents=3)
+        # receiver 0's trust in publisher 1 on both operands.
+        trust.set(0, np.array([0]), np.array([1]), np.array([0.4]))
+        trust.set(1, np.array([0]), np.array([1]), np.array([-0.1]))
+
+        composite_trust.derive_missing_for_proposition(trust, schema, 2)
+
+        assert trust.has_entry(2, np.array([0]), np.array([1]))[0]
+        # AND(x,y) = MIN(x,y) -- draft Table 1.
+        assert trust.get(2, np.array([0]), np.array([1]))[0] == pytest.approx(min(0.4, -0.1))
+
+    def test_does_not_derive_when_only_one_operand_known(self):
+        schema = self._schema(ExprType.OR)
+        trust = TrustStore(num_agents=3)
+        trust.set(0, np.array([0]), np.array([1]), np.array([0.4]))
+        # No trust set on operand 1 for this pair.
+
+        composite_trust.derive_missing_for_proposition(trust, schema, 2)
+
+        assert not trust.has_entry(2, np.array([0]), np.array([1]))[0]
+
+    def test_does_not_overwrite_an_existing_direct_entry(self):
+        schema = self._schema(ExprType.AND)
+        trust = TrustStore(num_agents=3)
+        trust.set(0, np.array([0]), np.array([1]), np.array([0.4]))
+        trust.set(1, np.array([0]), np.array([1]), np.array([-0.1]))
+        trust.set(2, np.array([0]), np.array([1]), np.array([0.25]))  # already-established direct trust
+
+        composite_trust.derive_missing_for_proposition(trust, schema, 2)
+
+        # Derivation must not clobber a direct entry with the structural fallback.
+        assert trust.get(2, np.array([0]), np.array([1]))[0] == pytest.approx(0.25)
+
+    def test_noop_for_axiom(self):
+        schema = self._schema(ExprType.AND)
+        trust = TrustStore(num_agents=3)
+        trust.set(0, np.array([0]), np.array([1]), np.array([0.4]))
+        # prop 0 is itself an axiom -- calling on it must not raise or do anything.
+        composite_trust.derive_missing_for_proposition(trust, schema, 0)
+        assert trust.get_matrix(0) is not None  # unchanged, still just the one entry set above

@@ -79,7 +79,7 @@ smoke run — belief converges plausibly toward an influencer's agenda, discover
 tracking behaves correctly, no crashes over 20 ticks). Unit tests
 (`tests/test_mechanisms.py`, `tests/test_config_params.py`) cover the pure-math pieces
 (fuzzy resolution, SmoothStep, reluctance, fallacy extensions) against hand-worked values
-from the draft's own formulas. 28 tests pass; `ruff check .` is clean.
+from the draft's own formulas. 32 tests pass; `ruff check .` is clean.
 
 - [x] `fuzzy_resolution.py` (3.1), `trust_belief_update.py` (3.2), `reluctance.py` (3.3),
       `smoothstep.py` (3.5), `fallacy_extensions.py` (3.7), `orphan_revelation.py` (3.8),
@@ -95,12 +95,16 @@ from the draft's own formulas. 28 tests pass; `ruff check .` is clean.
 **Known gaps left from this pass** (none silent — each is a real follow-up, not a
 correctness bug found and left unfixed):
 
-- [ ] `composite_trust.py` (draft 3.9) is implemented and unit-testable but **not called
-      from `tick_loop.py`** — `compute_alpha` currently only reads a publisher's *direct*
-      trust entry on a proposition; it never falls back to deriving one from the
-      publisher's trust on the proposition's operands when only that's available. Wire
-      `composite_trust.find_derivable`/`derive_and_store` into `compute_alpha`'s
-      per-proposition loop (`trust_belief_update.py`).
+- [x] `composite_trust.py` (draft 3.9) is now wired into `compute_alpha`
+      (`trust_belief_update.py`): before each proposition's matvec, composite operands'
+      trust masks are AND-ed to find every (receiver, publisher) pair with trust on both
+      operands but not on the composite itself, and derives+stores the fallback in one
+      batched call — `composite_trust.derive_missing_for_proposition`, replacing the
+      earlier per-pair `find_derivable`/`derive_and_store` stubs (never wired anywhere)
+      with a properly vectorized version. 4 new unit tests
+      (`tests/test_mechanisms.py::TestCompositeTrust`) check derivation, the
+      both-operands-required gate, that an existing direct entry is never clobbered by
+      the structural fallback, and the axiom no-op case.
 - [ ] `tick_loop.py`'s per-tick scheduling (Personal Affinity's neighbor gather, move
       resolution, conversation triggering) is a Python loop over agents, not vectorized —
       documented as an intentional scope trim in the module's own docstring (correctness

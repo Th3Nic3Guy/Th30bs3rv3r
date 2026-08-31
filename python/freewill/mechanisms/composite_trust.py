@@ -4,6 +4,11 @@ Distinct from orphan/revelation (Section 3.8): this derives a *publisher's* trus
 on a composite from that same publisher's trust on the composite's two operands, computed
 once when first needed and then stored as an ordinary, independently-evolving trust entry
 (draft 3.9) — never recomputed via Fz again after that.
+
+Batched over the whole population at once, not per (receiver, publisher) pair: "every
+receiver with trust on both of I's operands but not on I itself" is a single elementwise
+AND between the two operands' `TrustStore` boolean masks (PRD 4.9's vectorization
+principle — this is a small sparse mask, not a scan).
 """
 
 from __future__ import annotations
@@ -14,42 +19,36 @@ from freewill.engine.state import PropositionSchema, TrustStore
 from freewill.mechanisms.fuzzy_resolution import resolve
 
 
-def find_derivable(
-    schema: PropositionSchema, trust: TrustStore, receiver: int, publisher: int, candidate_props: np.ndarray
-) -> np.ndarray:
-    """Which of `candidate_props` (composites `receiver` needs P's trust on but has no
-    direct entry for) already have P's trust known on *both* operands, and so can be
-    derived right now (draft 3.9: "only when P's trust is already known on both of I's
-    operands")."""
-    left = schema.operand_left[candidate_props]
-    right = schema.operand_right[candidate_props]
-    r = np.array([receiver])
-    p = np.array([publisher])
-    derivable = np.array(
-        [
-            bool(trust.has_entry(int(le), r, p)[0]) and bool(trust.has_entry(int(ri), r, p)[0])
-            for le, ri in zip(left, right)
-        ]
-    )
-    return candidate_props[derivable]
+def derive_missing_for_proposition(trust: TrustStore, schema: PropositionSchema, prop_id: int) -> None:
+    """For composite `prop_id`, derive and store tau(P|I) = Fz(expr(I), tau(P|I_left),
+    tau(P|I_right)) for every (receiver, publisher) pair that already has trust on both
+    operands but none on `prop_id` yet (draft 3.9's "only when P's trust is already known
+    on both of I's operands"). No-op for axioms (no operands) and when nobody has trust
+    on both operands yet. Mutates `trust` in place.
+    """
+    if schema.is_axiom[prop_id]:
+        return
 
+    left = int(schema.operand_left[prop_id])
+    right = int(schema.operand_right[prop_id])
+    known_left = trust.known_matrix(left)
+    known_right = trust.known_matrix(right)
+    if known_left is None or known_right is None:
+        return
 
-def derive_and_store(
-    schema: PropositionSchema, trust: TrustStore, receiver: int, publisher: int, prop_id: int
-) -> float:
-    """tau(P|I) = Fz(expr(I), tau(P|I_left), tau(P|I_right)); stores the result as an
-    ordinary trust entry (so it evolves via Alpha Flux from here on, draft 3.9) and
-    returns it."""
-    left = schema.operand_left[prop_id]
-    right = schema.operand_right[prop_id]
-    tau_left = trust.get(int(left), np.array([receiver]), np.array([publisher]))[0]
-    tau_right = trust.get(int(right), np.array([receiver]), np.array([publisher]))[0]
-    value = float(
-        resolve(
-            np.array([schema.expr_type[prop_id]]),
-            np.array([tau_left]),
-            np.array([tau_right]),
-        )[0]
-    )
-    trust.set(prop_id, np.array([receiver]), np.array([publisher]), np.array([value]))
-    return value
+    both_known = known_left.multiply(known_right).tocoo()
+    if both_known.nnz == 0:
+        return
+    receivers, publishers = both_known.row, both_known.col
+
+    already = trust.has_entry(prop_id, receivers, publishers)
+    if already.all():
+        return
+    receivers = receivers[~already]
+    publishers = publishers[~already]
+
+    tau_left = trust.get(left, receivers, publishers)
+    tau_right = trust.get(right, receivers, publishers)
+    expr_type = np.full(len(receivers), schema.expr_type[prop_id])
+    values = resolve(expr_type, tau_left, tau_right)
+    trust.set(prop_id, receivers, publishers, values)

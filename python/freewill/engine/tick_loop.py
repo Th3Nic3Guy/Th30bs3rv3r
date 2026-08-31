@@ -239,11 +239,6 @@ def _apply_message(state: SimulationState, config: RunConfig, event: tuple[int, 
                 Event(run_id=state.run_id, tick=state.tick, agent_id=int(a), event_type="revelation", proposition_id=int(i))
             )
 
-    # NOTE: composite trust derivation (draft 3.9, freewill.mechanisms.composite_trust)
-    # is not yet wired in here -- it belongs alongside compute_alpha's per-proposition
-    # loop (triggered whenever alpha(I) needs a publisher's trust on a composite it has
-    # no direct entry for yet) and is tracked as a follow-up in docs/DEV_TASKLIST.md
-    # rather than folded into this already-large per-message path.
 
 
 def run_tick(
