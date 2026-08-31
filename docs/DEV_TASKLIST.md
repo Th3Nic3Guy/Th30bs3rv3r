@@ -163,6 +163,46 @@ Validation harness (PRD Section 4.4):
       (composite-trust wiring, the harness itself) were also both green on GitHub's
       runners.
 
+- [x] **Bug fix: NOT-typed composites could never be revealed or derive trust.**
+      `orphan_revelation.find_revelation_candidates` and `composite_trust.
+      derive_missing_for_proposition` both required "both operands known/trusted," but
+      NOT is unary (draft Table 1) — its `operand_right` is `NO_OPERAND` by construction,
+      so that check could never be satisfied and a NOT node sat permanently orphaned/
+      trust-less. Found while building a demo domain with a NOT node (see below), not by
+      inspection — a reminder the mechanism modules hadn't been exercised against every
+      `ExprType` end to end before this. Fixed both functions to branch on
+      `expr_type == ExprType.NOT` and require only the left operand; 5 new regression
+      tests. 55 tests pass total, `ruff check .` clean. Commit `d680fe5`.
+- [x] **Sample run: Flat Earth domain demo** (`python/scripts/demo_flat_earth.py`) — a
+      concrete, runnable demonstration of the full engine against a 10-proposition axiom
+      hierarchy (5 axioms, 5 composites spanning AND/OR/NOT/IMPLIES) authored as
+      illustrative test data, since none of the project's real domain-specification
+      documents exist in this repo yet (see the blocking-prerequisite note at the top of
+      this file). 30 agents, 250 ticks, deterministic under a fixed seed; run output
+      (event log, trajectory JSON) is regenerable and gitignored, not committed.
+  - Surfaced two real, now-documented gaps rather than working around them silently: (1)
+      draft 4.11's grid-based environmental axiom discovery isn't implemented, so this
+      demo seeds initial beliefs through the already-implemented self-discovery path
+      instead (draft 3.8, SELF as an ordinary publisher — see the `__main__.py` gap
+      above, which needs the real thing); (2) a composite proposition only ever enters
+      circulation once some agent who already holds it *asserts it in conversation* —
+      there is no spontaneous derivation from known operands. An early version of this
+      demo seeded only axioms and found every composite stuck at 0% saturation for the
+      whole run; corrected by seeding a few agents with each composite directly too,
+      matching the draft's own arrival-via-SELF convention.
+  - Result, characterized honestly rather than cherry-picked: the influencer's own axiom
+      (I3) saturates the whole population by tick 26 and then dominates nearly all
+      conversational traffic for the rest of the run (34,523 trust/belief-update events,
+      overwhelmingly about I3) — the draft's H10 "influencer effect" playing out for
+      real. The composites seeded directly spread to small pockets (13%/10%/3%/3%
+      saturation for I5/I6/I8/I9); I7 (`OR(I5,I6)`) never gets revealed anywhere in this
+      run, since no agent ever came to know both I5 and I6 — a genuine, reported
+      simulation outcome, not a bug.
+  - Used to validate the memory-chain feature above against real (not hand-built) engine
+      output: one agent's full reasoning trace replays correctly, including a discovery
+      of a composite, and 44 repeated `ad_hominem_halo_leak` fallacy-trigger events on
+      its trust in one publisher.
+
 ## M2 — Storage
 
 - [ ] `python/freewill/storage/checkpoint_store.py`: exercise `write_checkpoint` /
