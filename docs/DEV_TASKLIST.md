@@ -175,9 +175,40 @@ Validation harness (PRD Section 4.4):
       (`{run_id}/batches/events-{seq}.jsonl`) with (or add a compaction step producing)
       the single `{run_id}/events.jsonl` archive PRD Section 6.5 describes — currently a
       TODO in that file.
-- [ ] Build the per-agent memory-chain reconstruction (PRD Section 8.4): filter the
-      Cloud Storage event-log archive by `agent_id`, replay in tick order. Test against a
-      known small-run ground truth.
+- [x] **Per-agent memory-chain reconstruction** (PRD Section 7.4 — "Temporal Memory
+      Model"): `python/freewill/analysis/memory_chain.py`. `build_memory_chain` filters
+      the event log for one `agent_id` and replays in tick order;
+      `MemoryChain.belief_trajectory`/`trust_trajectory` follow one proposition's (or one
+      proposition+source's) history; `MemoryStep.explain()` turns each step's `mechanism`
+      field into a human-readable reasoning trace ("tick 2: trust_update I=0 from agent 0
+      via alpha_flux (+0.4996 -> +0.5000)"). `read_memory_chain` reads a local
+      JSON-lines file; `read_memory_chain_from_gcs` reads directly from the Cloud Storage
+      archive, with a documented fallback to the log shipper's current
+      `batches/*.jsonl` layout since the single-archive compaction TODO
+      (`go/cmd/logshipper`) isn't done yet.
+  - This surfaced (and this pass fixed) a real gap: **`trust_update` events were never
+      recorded at all** — `tick_loop.py`'s Alpha Flux path updated `TrustStore` in place
+      but logged nothing, so there was no trust trajectory to reconstruct. Also added:
+      `fallacy_triggered` events for the ad hominem/halo leak (`fallacy_extensions.
+      apply_ad_hominem_halo_leak` now returns its leaked updates instead of applying them
+      silently), and old/new belief values on `revelation` events (previously
+      proposition-id-only). Verified end-to-end against a real 6-agent, 25-tick engine
+      run (throwaway script, not committed) — the reconstructed trust trajectory shows
+      trust in an influencer converging to the SmoothStep ceiling, belief converging from
+      its arrival value toward the influencer's agenda; both exactly the dynamics
+      Sections 3.2/4.6 predict.
+  - **Deliberately not built this pass**: a *live* reasoning API that explains a belief
+      from current DAG/trust state (walking `fuzzy_resolution`/`orphan_revelation`/
+      `composite_trust` forward from the present, not replaying recorded history) — a
+      real, different feature this task's clarifying question named as an alternative
+      scope and the answer didn't select. Worth its own pass if wanted later.
+  - 15 new tests (`tests/test_memory_chain.py`, including one that round-trips through
+      the real `Event`/`EventLogBuffer` writer rather than only hand-rolled dicts). 51
+      tests pass total, `ruff check .` clean.
+  - Not yet exercised against a real (or emulated) GCS bucket — `read_memory_chain_from_gcs`
+      is untested beyond import; a natural next step is adding it to the docker-compose
+      smoke script (`python/scripts/local_smoke_run.py`) once an event-log archive
+      actually exists in the GCS emulator to read back.
 - [ ] `python/freewill/metrics/metrics.py`: implement `compute_run_metrics` against draft
       4.7 (saturation curves, stabilization time, polarization bimodality/variance,
       cluster assignments, NMI/ARI) and confirm it round-trips through

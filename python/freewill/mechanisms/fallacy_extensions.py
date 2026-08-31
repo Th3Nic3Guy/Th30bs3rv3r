@@ -60,10 +60,16 @@ def apply_ad_hominem_halo_leak(
     publisher: np.ndarray,
     prop_id: np.ndarray,
     delta_tau: np.ndarray,
-) -> None:
+) -> list[tuple[int, int, int, float, float]]:
     """For each (receiver, publisher, prop_id, delta_tau) trust-update event this tick,
     leak chi*delta_tau to every *other* proposition that (receiver, publisher) pair
-    already holds a trust value for (draft 3.7). Mutates `trust` in place.
+    already holds a trust value for (draft 3.7). Mutates `trust` in place. Returns every
+    leaked update as `(receiver, publisher, target_prop_id, old_value, new_value)` — this
+    module stays storage-agnostic (per the codebase's existing split, mechanism modules
+    never call `EventLogBuffer` themselves), so it hands the leak record back rather than
+    logging it; callers (`tick_loop.py`) record a `fallacy_triggered` event from it for
+    PRD Section 6.5's event log and, downstream, `freewill.analysis.memory_chain`'s
+    per-agent reasoning trace (PRD Section 7.4).
 
     This is the batched per-pair gather/scatter PRD Section 4.9 calls out as the one
     mechanism that doesn't reduce to a single global matmul: the outer loop below is over
@@ -71,6 +77,7 @@ def apply_ad_hominem_halo_leak(
     by population size), and every trust update within one pair's leak set is applied as
     one vectorized `TrustStore.set` call — never a per-agent Python loop.
     """
+    leaked_updates: list[tuple[int, int, int, float, float]] = []
     for r, p, i, dt, ss_n in zip(receiver, publisher, prop_id, delta_tau, smoothstep_degree[receiver]):
         leak_targets = trust.propositions_for_pair(int(r), int(p)) - {int(i)}
         if not leak_targets:
@@ -80,5 +87,7 @@ def apply_ad_hominem_halo_leak(
         prev = np.array([trust.get(int(t), np.array([r]), np.array([p]))[0] for t in targets])
         leaked = chi_r * dt
         new_vals = smoothstep(prev + leaked, ss_n)
-        for t, v in zip(targets, new_vals):
+        for t, old_v, v in zip(targets, prev, new_vals):
             trust.set(int(t), np.array([r]), np.array([p]), np.array([v]))
+            leaked_updates.append((int(r), int(p), int(t), float(old_v), float(v)))
+    return leaked_updates

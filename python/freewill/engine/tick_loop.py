@@ -176,11 +176,22 @@ def _apply_message(state: SimulationState, config: RunConfig, event: tuple[int, 
         n_receiver = state.smoothstep_degree[receiver]
         new_tau = smoothstep(np.array([tau_p_i + delta_tau]), np.array([n_receiver]))[0]
         state.trust.set(prop, np.array([receiver]), np.array([publisher]), np.array([new_tau]))
+        event_log.record(
+            Event(run_id=state.run_id, tick=state.tick, agent_id=receiver, event_type="trust_update",
+                  mechanism="alpha_flux", proposition_id=prop, source_id=publisher,
+                  old_value=float(tau_p_i), new_value=float(new_tau))
+        )
 
-        fallacy_extensions.apply_ad_hominem_halo_leak(
+        leaked = fallacy_extensions.apply_ad_hominem_halo_leak(
             state.trust, coeffs["chi"].to_numpy(), state.smoothstep_degree,
             np.array([receiver]), np.array([publisher]), np.array([prop]), np.array([delta_tau]),
         )
+        for _r, _p, target_prop, old_v, new_v in leaked:
+            event_log.record(
+                Event(run_id=state.run_id, tick=state.tick, agent_id=receiver, event_type="fallacy_triggered",
+                      mechanism="ad_hominem_halo_leak", proposition_id=target_prop, source_id=publisher,
+                      old_value=old_v, new_value=new_v)
+            )
 
         delta_beta = trust_belief_update.apply_dirty_set_update(state, np.array([receiver]), np.array([prop]))
         delta_beta_prime = fallacy_extensions.apply_negativity_bias(delta_beta, coeffs["theta"].to_numpy()[[receiver]])
@@ -231,12 +242,15 @@ def _apply_message(state: SimulationState, config: RunConfig, event: tuple[int, 
     if len(agent_idx):
         rho = reluctance.compute_rho(state.belief, state.dag)
         gamma = reluctance.compute_gamma(rho, coeffs["xi"].to_numpy())
+        old_beliefs = state.belief[agent_idx, prop_idx].copy()
         orphan_revelation.apply_revelation(
             state.belief, state.orphan, state.schema, agent_idx, prop_idx, gamma[agent_idx, prop_idx]
         )
-        for a, i in zip(agent_idx, prop_idx):
+        for a, i, old_v in zip(agent_idx, prop_idx, old_beliefs):
             event_log.record(
-                Event(run_id=state.run_id, tick=state.tick, agent_id=int(a), event_type="revelation", proposition_id=int(i))
+                Event(run_id=state.run_id, tick=state.tick, agent_id=int(a), event_type="revelation",
+                      mechanism="orphan_revelation", proposition_id=int(i),
+                      old_value=float(old_v), new_value=float(state.belief[a, i]))
             )
 
 
