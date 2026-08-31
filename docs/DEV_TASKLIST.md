@@ -7,22 +7,22 @@ as they land. Each item names the file(s) it touches.
 
 ## Blocking prerequisite
 
-- [ ] **Add `FREE_WILL_draft.md` (and the decisions log / checklist / axiom-hierarchy
-      docs) to this repo.** Every mechanism module in `python/freewill/mechanisms/` and
-      every metric in `python/freewill/metrics/metrics.py` is currently a stub raising
-      `NotImplementedError` specifically because these source documents aren't here yet
-      (PRD Section 2.3: no formula gets invented ahead of the draft). Nothing in M1–M5
-      below can start for real until this lands.
+- [x] **Add `FREE_WILL_draft.md` to this repo.** Landed at `docs/FREE_WILL_draft.md`.
+      The companion decisions log / checklist / 10 domain axiom-hierarchy documents are
+      still not in the repo — nothing below needs them yet (M1's mechanism math is fully
+      specified in the draft alone), but M2's metrics work and loading real domain axiom
+      hierarchies into `PropositionSchema` will need them.
 
 ## M0 — Trust tensor spike
 
-- [ ] Benchmark `pydata/sparse` (COO-backed N-D arrays) vs. a `dict[proposition_id ->
-      scipy.sparse]` fallback for the trust tensor $\mathbf{T}$, at representative scale
-      (500 agents, growing proposition count, 1000 ticks) — PRD Section 4.1's
-      implementation note.
-- [ ] Record the decision (a short ADR, e.g. `docs/adr/0002-trust-tensor-backend.md`) and
-      update `python/freewill/engine/state.py`'s `trust_tensor` docstring to name the
-      chosen representation instead of leaving it `object`.
+- [x] **Decision made without the benchmark** (`docs/adr/0002-engine-state-representation.md`):
+      trust tensor is `dict[proposition_id -> scipy.sparse]` (PRD 4.1's own stated
+      fallback), belief/omega are dense NumPy. This unblocked M1 since no GCP infra was
+      reachable this session to actually run the benchmark.
+- [ ] Still worth doing before the full run matrix: benchmark `pydata/sparse` vs. the
+      dict-of-scipy-sparse choice actually made, at representative scale (500 agents,
+      growing proposition count, 1000 ticks), to confirm ADR 0002 holds at that scale —
+      not just re-litigate it from scratch.
 
 ## M0.5 — Infra live
 
@@ -41,43 +41,65 @@ as they land. Each item names the file(s) it touches.
 
 ## M1 — Core engine
 
-Implement each mechanism module against its draft section, replacing the
-`NotImplementedError` stub:
+All ten original mechanism modules are implemented against the draft, plus an eleventh
+(`message_formulation.py`, draft 4.12) the original module list missed — see PRD Section
+4.3's "Added during M1 implementation" note. `engine/state.py` was rebuilt around them
+(`docs/adr/0002-engine-state-representation.md`) and `engine/tick_loop.py` wires them
+into draft 4.11's six-step tick sequence end-to-end (checked with a hand-built 6-agent
+smoke run — belief converges plausibly toward an influencer's agenda, discovery/known
+tracking behaves correctly, no crashes over 20 ticks). Unit tests
+(`tests/test_mechanisms.py`, `tests/test_config_params.py`) cover the pure-math pieces
+(fuzzy resolution, SmoothStep, reluctance, fallacy extensions) against hand-worked values
+from the draft's own formulas. 28 tests pass; `ruff check .` is clean.
 
-- [ ] `python/freewill/mechanisms/fuzzy_resolution.py` — draft 3.1
-- [ ] `python/freewill/mechanisms/trust_belief_update.py` — draft 3.2 (Alpha Flux, Forward Flow)
-- [ ] `python/freewill/mechanisms/reluctance.py` — draft 3.3
-- [ ] `python/freewill/mechanisms/smoothstep.py` — draft 3.5
-- [ ] `python/freewill/mechanisms/fallacy_extensions.py` — draft 3.7 (batched extensions
-      + the ad hominem/halo leak's per-pair gather/scatter)
-- [ ] `python/freewill/mechanisms/orphan_revelation.py` — draft 3.8
-- [ ] `python/freewill/mechanisms/composite_trust.py` — draft 3.9
-- [ ] `python/freewill/mechanisms/flowback.py` — draft 4.2 (Omega Flux, Psi Flux)
-- [ ] `python/freewill/mechanisms/influencer.py` — draft 4.6 (communication matrix + reach $R$)
-- [ ] `python/freewill/mechanisms/movement.py` — draft 4.11 (Personal Affinity, candidate
-      moves, collision resolution)
+- [x] `fuzzy_resolution.py` (3.1), `trust_belief_update.py` (3.2), `reluctance.py` (3.3),
+      `smoothstep.py` (3.5), `fallacy_extensions.py` (3.7), `orphan_revelation.py` (3.8),
+      `composite_trust.py` (3.9), `flowback.py` (4.2), `influencer.py` (4.6),
+      `movement.py` (4.11), `message_formulation.py` (4.12, new).
+- [x] `engine/tick_loop.py` wired to real implementations, with a seeded
+      `np.random.Generator` threaded through, `k_assertions` incremented on each outgoing
+      message, and events appended to `EventLogBuffer` for discovery/belief_update/
+      revelation/message_received.
+- [x] `python/tests/test_mechanisms.py`: real assertions (not stubs) for the pure-math
+      modules.
 
-Wire the tick loop up to real implementations:
+**Known gaps left from this pass** (none silent — each is a real follow-up, not a
+correctness bug found and left unfixed):
 
-- [ ] `python/freewill/engine/tick_loop.py`: thread a seeded `np.random.Generator` from
-      `config.seed` through to `movement.compute_candidate_moves` (currently `rng=None`).
-- [ ] `python/freewill/engine/tick_loop.py`: derive `dirty_propositions` / `dirty_agents`
-      from step 3's discovery/conversation output instead of the current `None`
-      placeholders passed into steps 4–5.
-- [ ] `python/freewill/engine/tick_loop.py`: pass `colliding_pairs` from
-      `movement.resolve_collisions`'s output into `apply_ad_hominem_halo_leak` instead of
-      the current `[]` placeholder.
-- [ ] `python/freewill/engine/tick_loop.py`: wire each mechanism call to append its
-      events to `EventLogBuffer` (PRD 4.2 step 6) — not yet threaded through the stub loop.
-- [ ] `python/freewill/engine/tick_loop.py` `_write_checkpoint`: serialize
-      `state.belief_matrix` / `state.trust_tensor` into `savez`-compatible component
-      arrays instead of the current partial `arrays` dict.
-- [ ] `python/freewill/__main__.py`: implement the real pipeline (load `RunConfig` via
-      `freewill.storage.{run_registry,config_cache}`, build the initial
-      `SimulationState`, call `freewill.engine.run_simulation`) — currently raises
-      `NotImplementedError`.
+- [ ] `composite_trust.py` (draft 3.9) is implemented and unit-testable but **not called
+      from `tick_loop.py`** — `compute_alpha` currently only reads a publisher's *direct*
+      trust entry on a proposition; it never falls back to deriving one from the
+      publisher's trust on the proposition's operands when only that's available. Wire
+      `composite_trust.find_derivable`/`derive_and_store` into `compute_alpha`'s
+      per-proposition loop (`trust_belief_update.py`).
+- [ ] `tick_loop.py`'s per-tick scheduling (Personal Affinity's neighbor gather, move
+      resolution, conversation triggering) is a Python loop over agents, not vectorized —
+      documented as an intentional scope trim in the module's own docstring (correctness
+      over population-scale performance for this pass), but real follow-up work before
+      running at 300–500 agents × 1000 ticks × ~3,960 runs. `TrustStore.known_neighbors`
+      plus a fixed-width neighbor-set padding scheme is the likely vectorization path.
+- [ ] `influencer.top_up_reach`'s selection rule (which agents fill an under-crowded
+      influencer's reach up to $R$) is a documented implementation choice (uniform random)
+      — the draft states *that* R agents are reached but not *how* the selection works
+      beyond physical co-location. Flag for the Section 4.10 validation pass or an
+      explicit decisions-log entry, not a silent assumption.
+- [ ] `engine/tick_loop.py`'s `_apply_message` reluctance/gamma computation
+      (`reluctance.compute_rho`/`compute_gamma`) recomputes over the *entire* belief
+      matrix once per message rather than restricting to the touched agent — correct but
+      wasteful; tighten once a real profiling run justifies it.
+- [ ] `python/freewill/__main__.py`: still raises `NotImplementedError` — implement the
+      real pipeline (load `RunConfig` via `freewill.storage.{run_registry,config_cache}`,
+      build the initial `SimulationState` — including loading a real domain's
+      `PropositionSchema`/`DagAdjacency` from an axiom-hierarchy document, which doesn't
+      exist in this repo yet — call `freewill.engine.run_simulation`).
+- [ ] `engine/tick_loop.py` `_write_checkpoint`: writes dense arrays directly into the
+      `.npz`; revisit once `CheckpointStore`'s sparse-serialization assumption (PRD 6.2)
+      is reconciled with ADR 0002's dense-array decision — probably just works as-is
+      (`np.savez_compressed` handles dense arrays natively) but hasn't been exercised
+      against a real GCS bucket.
 
-Validation harness (PRD Section 4.4):
+Validation harness (PRD Section 4.4) — **not started this pass**, tracked separately from
+the mechanism implementation above since it's substantial work in its own right:
 
 - [ ] `python/freewill/validation/iterative_reference.py`: implement the per-agent-loop
       reference for each mechanism, mirroring the vectorized modules above.
@@ -146,9 +168,10 @@ Validation harness (PRD Section 4.4):
 
 ## Cross-cutting / hardening (not milestone-gated)
 
-- [ ] `python/freewill/config/params.py`: confirm `RunConfig`'s field set actually covers
-      every parameter the finished mechanism modules need — it was written ahead of the
-      formulas, so expect additions once M1 lands.
+- [x] `python/freewill/config/params.py`: rebuilt against draft Section 3.6's actual
+      per-agent coefficient distributions (`AgentCoefficientDistributions`, one `BetaSpec`
+      per coefficient) plus `PopulationStability`/`SeedingCondition` enums for draft
+      4.3/4.4/4.6's run conditions — superseding the pre-draft placeholder schema.
 - [ ] `go/internal/cloudsql`, `go/internal/rediscache`: add tests (both currently have
       none — they were type-checked via `go build`/`go vet` but not exercised against a
       real or emulated backend).

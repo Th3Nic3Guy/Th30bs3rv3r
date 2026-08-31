@@ -166,7 +166,14 @@ enforced structurally, not just by convention:
 `fuzzy_resolution.py` (3.1) · `trust_belief_update.py` (3.2) · `reluctance.py` (3.3) ·
 `smoothstep.py` (3.5) · `fallacy_extensions.py` (3.7) · `orphan_revelation.py` (3.8) ·
 `composite_trust.py` (3.9) · `flowback.py` (4.2) · `influencer.py` (4.6) ·
-`movement.py` (4.11)
+`movement.py` (4.11) · `message_formulation.py` (4.12)
+
+**Added during M1 implementation**: `message_formulation.py` (4.12) was not in this
+list's original draft — this section was written from the checklist/decisions log alone,
+before `FREE_WILL_draft.md` was in the repo. Section 4.12 turned out to be a real,
+separately-formalized mechanism the tick loop needs (its own step in draft 4.11's "Tick
+sequence, in full"), so it gets its own module rather than being folded into an existing
+one, consistent with this section's own "trace every formula to a section" principle.
 
 ### 4.4 Iterative fallback / validation harness
 
