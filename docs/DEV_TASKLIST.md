@@ -156,6 +156,12 @@ Validation harness (PRD Section 4.4):
       per-step path filters, only per-workflow, and this workflow already covers Python/
       Go/Terraform/compose together) — broader than PRD 4.4's literal "on every change to
       a mechanism module" but strictly a superset of it.
+      **Confirmed green**: [run 33418247784](https://github.com/Th3Nic3Guy/Th30bs3rv3r/actions/runs/33418247784),
+      all 4 jobs passed, with "Cross-validate mechanism modules against the iterative
+      reference (PRD 4.4)" showing as its own distinct, passing step in the Python job —
+      not just planned, actually landed and running that way. The two preceding commits
+      (composite-trust wiring, the harness itself) were also both green on GitHub's
+      runners.
 
 ## M2 — Storage
 
